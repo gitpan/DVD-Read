@@ -9,7 +9,7 @@ use vars qw($AUTOLOAD);
 use DVD::Read::Dvd;
 use DVD::Read::Title;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub AUTOLOAD {
     my ($self, @args) = @_;
