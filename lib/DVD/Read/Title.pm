@@ -5,26 +5,29 @@ use strict;
 use warnings;
 
 use DVD::Read;
-use DVD::Read::Dvd::Ifo;
+use DVD::Read::Dvd::Ifo::Vts;
+use DVD::Read::Dvd::File;
 use AutoLoader;
 use vars qw($AUTOLOAD);
+use Carp;
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 sub AUTOLOAD {
     my ($self, @args) = @_;
     my $sub = $AUTOLOAD;
     $sub =~ s/.*:://;
-    if (exists(${DVD::Read::Dvd::Ifo::}{"vts_$sub"})) {
+    if (exists(${DVD::Read::Dvd::Ifo::Vts::}{"vts_$sub"})) {
         $sub = "vts_$sub";
         return $self->_vts->$sub(@args);
-    } elsif (exists(${DVD::Read::Dvd::Ifo::}{$sub}) && $sub =~ /^chapter_/) {
+    } elsif (exists(${DVD::Read::Dvd::Ifo::Vts::}{$sub}) && $sub =~ /^chapter_/) {
         my ($chapter) = (@args);
-        $self->_vmg->$sub(
-            $self->_vts,
+        $self->_vts->$sub(
             $self->_vmg->title_ttn($self->{titleid}),
             $chapter,
         );
+    } else {
+        croak("No function DVD::Read::Title::$sub");
     }
 }
 
@@ -52,18 +55,6 @@ Return a new DVD::Read::Title object for $dvd and title number
 $title.
 
 $dvd can be either a string for IFO location, or a DVD::Read object.
-
-=head2 chapter_first_sector($chapter)
-
-Return the first sector for chapter number $chapter
-
-=head2 chapter_last_sector($chapter)
-
-Return the last sector for chapter number $chapter
-
-=head2 chapter_offset($chapter)
-
-Return the chapter offset from the start of title in millisecond
 
 =cut
 
@@ -100,8 +91,22 @@ sub _vts {
     $self->_vmg or return;
     my $nr = $self->title_nr or return;
     return $self->{vts} ||=
-        DVD::Read::Dvd::Ifo->new($self->_dvd->{dvd}, $nr);
+        DVD::Read::Dvd::Ifo::Vts->new($self->_dvd->{dvd}, $nr);
 }
+
+=head2 chapter_first_sector($chapter)
+
+Return the first sector for chapter number $chapter
+
+=head2 chapter_last_sector($chapter)
+
+Return the last sector for chapter number $chapter
+
+=head2 chapter_offset($chapter)
+
+Return the chapter offset from the start of title in millisecond
+
+=cut
 
 =head2 length
 
@@ -112,8 +117,7 @@ The length in millisecond of this title.
 sub length {
     my ($self) = @_;
     $self->_vmg or return;
-    $self->_vmg->title_length(
-        $self->_vts,
+    $self->_vts->title_length(
         $self->_vmg->title_ttn($self->{titleid}),
     );
 }
@@ -142,6 +146,55 @@ sub title_nr {
     $self->_vmg->title_nr($self->{titleid});
 }
 
+=head2 extract_chapter($chapter, $out)
+
+Copy video data for chapter $chapter into $out where:
+
+$out is either a file path or an open file handle
+
+$chapter either the chapter number to extract or an array of chapters
+to extract.
+
+=cut
+
+sub extract_chapter {
+    my ($self, $chapter, $outf) = @_;
+
+    my $out;
+    if (ref $outf eq 'GLOB') {
+        $out = $outf;
+    } else {
+        open ($out, '>', $outf) or return;
+    }
+
+    my @chapters = ref $chapter eq 'ARRAY'
+        ? @{ $chapter }
+        : ($chapter);
+
+    my $dvdfile = DVD::Read::Dvd::File->new(
+        $self->_dvd->{dvd},
+        $self->title_nr,
+        'VOB',
+    ) or return;
+
+    my $count = 0;
+    foreach my $ch (@chapters) {
+        defined(my $fs = $self->chapter_first_sector($ch)) or return;
+        defined(my $ls = $self->chapter_last_sector($ch))  or return;
+        foreach($fs .. $ls) {
+            my ($co, $data) = $dvdfile->readblock($_, 1);
+            $count += $co;
+            print $out $data;
+        }
+    }
+
+    if (ref $outf ne 'GLOB') {
+        close($out);
+    }
+
+    $count;
+}
+
 =head1 AUTOLOADED FUNCTIONS
 
 All functions from L<DVD::Read::Dvd::IFO> module starting by 'vts_'
@@ -166,8 +219,13 @@ Just mail me if this is a problem.
 
 =head1 SEE ALSO
 
-L<DVD::Read>
-L<DVD::Read::Dvd::Ifo>
+=over 4
+
+=item L<DVD::Read>
+
+=item L<DVD::Read::Dvd::Ifo>
+
+=back
 
 =head1 AUTHOR
 

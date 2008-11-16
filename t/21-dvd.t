@@ -1,5 +1,5 @@
 use strict;
-use Test::More tests => 14;
+use Test::More tests => 16;
 BEGIN { use_ok('DVD::Read') };
 BEGIN { use_ok('DVD::Read::Title') };
 
@@ -19,3 +19,11 @@ my @audios = $title->audios;
 is(scalar(@audios), 2, "Can get audio count");
 is($title->chapter_first_sector(1), 0, "can get first sector");
 is($title->length, 5_047_300, "Can get title length");
+eval {
+    $title->xxxxxxx();
+};
+ok($@, 'calling non exitant function failed');
+eval {
+    $dvd->xxxxxxx();
+};
+ok($@, 'calling non exitant function failed');

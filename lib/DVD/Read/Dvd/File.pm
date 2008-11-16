@@ -1,4 +1,4 @@
-package DVD::Read::Dvd;
+package DVD::Read::Dvd::File;
 
 use 5.010000;
 use strict;
@@ -6,26 +6,25 @@ use warnings;
 
 our $VERSION = '0.03';
 
-use DVD::Read::Dvd::Ifo::Vmg;
-use DVD::Read::Dvd::Ifo::Vts;
+use DVD::Read::Dvd;
 
 require XSLoader;
 XSLoader::load('DVD::Read', $VERSION);
 
 =head1 NAME
 
-DVD::Read::Dvd - DVD access using libdvdread
+DVD::Read::Dvd::File - DVD file access using libdvdread
 
 =head1 SYNOPSIS
 
   use DVD::Read::Dvd;
   my $dvd = DVD::Read::Dvd->new('/dev/cdrom');
-  print $dvd->volid;
-
+  my file = DVD::Read::Dvd::File->new($dvd, 1, "VOB");
+  
 =head1 DESCRIPTION
 
 This module allow to get information from Video DVD using
-the dvdread library.
+by using the dvdread library.
 
 =head1 CONSTANTS
 
@@ -35,25 +34,44 @@ Return the logical DVD block size
 
 =head1 FUNCTIONS
 
-=head2 new($device)
+=head2 new($dvd, $num, $type)
 
-Return a new DVD::Read::Dvd object over the $device.
+Open a file from the DVD.
 
-$device can be a block devide, an iso file, a directory, or whatever
-supported by libdvdread.
+=over 4
 
-=cut
+=item $dvd is a L<DVD::Read::Dvd> object over the dvd device
 
-sub new {
-    my ($class, $device) = @_;
-    if (-d $device) { $device .= '/' }
-    $class->_new($device)
-}
+=item $num is the file or title number to open
 
-=head2 volid
+=item $type is the file type to open:
 
-Return the DVD volume id, if possible (eg the device
-used is an iso image or a real device.
+=over 4
+
+=item IFO VIDEO_TS.IFO or VTS_XX_0.IFO (title)
+
+=item BUP VIDEO_TS.BUP or VTS_XX_0.BUP (title)
+
+=item MENU VIDEO_TS.VOB or VTS_XX_0.VOB (title)
+
+=item VOB VTS_XX_[1-9].VOB (title).  All files in
+the title set are opened and read as a single file. 
+
+=back
+
+=back
+
+=head2 size
+
+Return the file size in blocks
+
+=head2 readblock($offset, $count)
+
+Read a $count block(s) from the file at block offset $offset.
+
+In scalar context, return the read data.
+
+In array context return the count of blocks read and read data.
 
 =cut
 
@@ -77,8 +95,6 @@ Just mail me if this is a problem.
 =over 4
 
 =item L<DVD::Read::Dvd>
-
-=item L<DVD::Read::Dvd::Ifo>
 
 =back
 

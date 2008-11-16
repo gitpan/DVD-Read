@@ -12,29 +12,30 @@ foreach my $location (@dvds) {
         next;
     };
 
-    print $dvd->volid . "\n";
-    printf("%d title, %d angles\n",
-        $dvd->titles_count, $dvd->angles_count);
+    print ($dvd->volid || '');
+    printf(" %d titles\n",
+        $dvd->titles_count);
 
     foreach my $titleno (1 .. $dvd->titles_count) {
         my $title = $dvd->get_title($titleno);
-        printf("  * Title: %2d (%2d) %2d %8dms\n",
+        printf("  * Title: %02d (%2d) %2d ch. %2d ang. %8dms\n",
             $titleno, $title->title_nr, $title->chapters_count,
-            $title->length,
+            $dvd->title_angles_count($titleno), $title->length,
         );
         foreach my $audio ($title->audios) {
-            printf("    * Audio     %2d (%s) %s\n",
-                $audio, $title->audio_format_txt($audio) || 'N/A',
-                $title->audio_language($audio) || 'N/A',
+            printf("    * Audio     %02d (%s) (%s)\n",
+                $audio,
+                $title->audio_language($audio) || '--',
+                $title->audio_format_txt($audio) || 'N/A',
             );
         }
         foreach my $subtitle ($title->subtitles) {
-            printf("    * Subtitle  %2d (%s)\n",
+            printf("    * Subtitle  %02d (%s)\n",
                 $subtitle, $title->subtitle_language($subtitle),
             );
         }
         foreach my $ch (1 .. $title->chapters_count) {
-            printf("    * Chapitre  %2d %8dms (%d => %d)\n",
+            printf("    * Chapitre  %02d %8dms (%d => %d)\n",
                 $ch,
                 $title->chapter_offset($ch),
                 $title->chapter_first_sector($ch),

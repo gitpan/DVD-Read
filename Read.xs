@@ -7,9 +7,16 @@
 
 #include "Read.h"
 
-MODULE = DVD::Read		PACKAGE = DVD::Read		
+int   audio_id[7]     = {0x80, 0, 0xC0, 0xC0, 0xA0, 0, 0x88};
 
 MODULE = DVD::Read		PACKAGE = DVD::Read::Dvd
+
+ssize_t
+BLOCK_SIZE()
+    CODE:
+    RETVAL=DVD_VIDEO_LB_LEN;
+    OUTPUT:
+    RETVAL
 
 void
 _new(class, device)
@@ -40,6 +47,71 @@ DESTROY(dvd)
     CODE:
     DVDClose(dvd);
 
+MODULE = DVD::Read      PACKAGE = DVD::Read::Dvd::File
+
+ssize_t
+BLOCK_SIZE()
+    CODE:
+    RETVAL=DVD_VIDEO_LB_LEN;
+    OUTPUT:
+    RETVAL
+
+void
+new(class, dvd, num, type)
+    char * class
+    dvd_reader_t * dvd
+    unsigned int num
+    char * type
+    PREINIT:
+    dvd_read_domain_t domain = -1;
+    dvd_file_t * dvd_file;
+    char * ttype[] = { "IFO", "BUP", "MENU", "VOB", NULL };
+    int i;
+    PPCODE:
+    for (i=0; ttype[i] != NULL; i++)
+        if (!strcmp(type, ttype[i]))
+            domain = i;
+
+    if (domain < 0)
+        croak("Wrong file type");
+        
+    if ((dvd_file = DVDOpenFile(dvd, num, domain)) != NULL) {
+        XPUSHs(sv_2mortal(sv_setref_pv(newSVpv("", 0), class, (void *)dvd_file)));
+    } else {
+        XSRETURN_UNDEF;
+    }
+
+void
+DESTROY(dvd_file)
+    dvd_file_t * dvd_file
+    CODE:
+    DVDCloseFile(dvd_file);
+
+ssize_t
+size(dvd_file)
+    dvd_file_t * dvd_file
+    CODE:
+    RETVAL=DVDFileSize(dvd_file);
+    OUTPUT:
+    RETVAL
+
+void
+readblock(dvd_file, offset, size)
+    dvd_file_t * dvd_file
+    int offset
+    ssize_t size
+    PREINIT:
+    ssize_t res;
+    unsigned char * data;
+    PPCODE:
+    data = malloc(DVD_VIDEO_LB_LEN * size);
+    if ((res = DVDReadBlocks(dvd_file, offset, size, data)) >= 0) {
+        if (GIMME_V == G_ARRAY) /* in array context,
+                               * return the nb of block read */
+        XPUSHs(sv_2mortal(newSViv(res)));
+        XPUSHs(sv_2mortal(newSVpv(data, DVD_VIDEO_LB_LEN * res)));
+    }
+
 MODULE = DVD::Read		PACKAGE = DVD::Read::Dvd::Ifo
 
 void
@@ -55,66 +127,95 @@ new(class, dvd, titleno)
     else
         XSRETURN_UNDEF;
 
-int
-titles_count(ifo)
+void
+DESTROY(ifo)
     ifo_handle_t * ifo
     CODE:
-    if (ifo->tt_srpt)
-        RETVAL = ifo->tt_srpt->nr_of_srpts;
-    else
-        RETVAL = 0;
-    OUTPUT:
-    RETVAL 
+    ifoClose(ifo);
 
-int
+MODULE = DVD::Read		PACKAGE = DVD::Read::Dvd::Ifo::Vmg
+
+void
+vmg_identifier(ifo)
+    ifo_handle_t * ifo
+    PPCODE:
+    if (ifo->vmgi_mat) {
+        XPUSHs(sv_2mortal(newSVpv(ifo->vmgi_mat->vmg_identifier, 12)));
+    } else
+        croak(CROAK_NOT_VGM);
+
+void
+titles_count(ifo)
+    ifo_handle_t * ifo
+    PPCODE:
+    if (ifo->tt_srpt)
+        XPUSHs(sv_2mortal(newSViv(ifo->tt_srpt->nr_of_srpts)));
+    else
+        croak(CROAK_NOT_VGM);
+
+void
 title_chapters_count(ifo, titleno)
     ifo_handle_t * ifo
     int titleno
-    CODE:
-    if (ifo->tt_srpt && titleno <= ifo->tt_srpt->nr_of_srpts)
-        RETVAL = ifo->tt_srpt->title[titleno -1].nr_of_ptts;
-    else
-        RETVAL = 0;
-    OUTPUT:
-    RETVAL
+    PPCODE:
+    if (ifo->tt_srpt) {
+        if(titleno > 0 && titleno <= ifo->tt_srpt->nr_of_srpts)
+        XPUSHs(sv_2mortal(newSViv(ifo->tt_srpt->title[titleno -1].nr_of_ptts)));
+    } else
+        croak(CROAK_NOT_VGM);
 
-int
+void
 title_angles_count(ifo, titleno)
     ifo_handle_t * ifo
     int titleno
-    CODE:
-    if (ifo->tt_srpt && titleno <= ifo->tt_srpt->nr_of_srpts)
-        RETVAL = ifo->tt_srpt->title[titleno -1].nr_of_angles;
-    else
-        RETVAL = 0;
-    OUTPUT:
-    RETVAL
+    PPCODE:
+    if (ifo->tt_srpt) {
+        if (titleno > 0 && titleno <= ifo->tt_srpt->nr_of_srpts)
+        XPUSHs(sv_2mortal(newSViv(ifo->tt_srpt->title[titleno -1].nr_of_angles)));
+    } else
+        croak(CROAK_NOT_VGM);
 
-int
+void
 title_nr(ifo, titleno)
     ifo_handle_t * ifo
     int titleno
-    CODE:
-    if (ifo->tt_srpt && titleno <= ifo->tt_srpt->nr_of_srpts)
-        RETVAL = ifo->tt_srpt->title[titleno -1].title_set_nr;
-    else
-        RETVAL = 0;
-    OUTPUT:
-    RETVAL
+    PPCODE:
+    if (ifo->tt_srpt) {
+        if (titleno > 0 && titleno <= ifo->tt_srpt->nr_of_srpts)
+        XPUSHs(sv_2mortal(newSViv(ifo->tt_srpt->title[titleno -1].title_set_nr)));
+    } else
+        croak(CROAK_NOT_VGM);
 
-int
+void
 title_ttn(ifo, titleno)
     ifo_handle_t * ifo
     int titleno
-    CODE:
-    if (ifo->tt_srpt && titleno <= ifo->tt_srpt->nr_of_srpts)
-        RETVAL = ifo->tt_srpt->title[titleno -1].vts_ttn;
-    else
-        RETVAL = 0;
-    OUTPUT:
-    RETVAL
+    PPCODE:
+    if (ifo->tt_srpt) {
+        if (titleno > 0 && titleno <= ifo->tt_srpt->nr_of_srpts)
+        XPUSHs(sv_2mortal(newSViv(ifo->tt_srpt->title[titleno -1].vts_ttn)));
+    } else
+        croak(CROAK_NOT_VGM);
 
-# FROM VTS 
+MODULE = DVD::Read		PACKAGE = DVD::Read::Dvd::Ifo::Vts
+
+void
+vts_ttn_count(ifo)
+    ifo_handle_t * ifo
+    PPCODE:
+    if (ifo->vts_ptt_srpt)
+        XPUSHs(sv_2mortal(newSViv(ifo->vts_ptt_srpt->nr_of_srpts)));
+    else
+        croak(CROAK_NOT_VTS);
+
+void
+vts_identifier(ifo)
+    ifo_handle_t * ifo
+    PPCODE:
+    if (ifo->vtsi_mat)
+        XPUSHs(sv_2mortal(newSVpv(ifo->vtsi_mat->vts_identifier, 12)));
+    else
+        croak(CROAK_NOT_VTS);
 
 void
 vts_video_mpeg_version(ifo)
@@ -235,16 +336,6 @@ vts_video_size(ifo)
         XPUSHs(sv_2mortal(newSViv(height)));
     }
 
-int
-vts_ttn_count(ifo)
-    ifo_handle_t * ifo
-    CODE:
-    if (ifo->vts_pgcit)
-        RETVAL=ifo->vts_pgcit->nr_of_pgci_srp;
-    else RETVAL = 0;
-    OUTPUT:
-    RETVAL
-
 void
 vts_audios(ifo)
     ifo_handle_t * ifo
@@ -253,7 +344,9 @@ vts_audios(ifo)
     int i;
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else
     for (i = 0; i < ifo->vtsi_mat->nr_of_vts_audio_streams; i++) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[i];
         if(!(  a_attr->audio_format == 0
@@ -276,8 +369,9 @@ vts_audio_language(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         if(a_attr->lang_type == 1) {
             char tmp[3] = "";
@@ -295,10 +389,25 @@ vts_audio_format(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->audio_format)));
+    }
+
+void
+vts_audio_id(ifo, audiono)
+    ifo_handle_t * ifo
+    int audiono
+    PREINIT:
+    audio_attr_t   *a_attr;
+    PPCODE:
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+        a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
+        XPUSHs(sv_2mortal(newSViv(audio_id[a_attr->audio_format])));
     }
 
 void
@@ -308,8 +417,9 @@ vts_audio_channel(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->channels)));
     }
@@ -321,8 +431,9 @@ vts_audio_appmode(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->application_mode)));
     }
@@ -334,8 +445,9 @@ vts_audio_quantization(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->quantization)));
     }
@@ -347,8 +459,9 @@ vts_audio_frequency(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->sample_frequency)));
     }
@@ -360,8 +473,9 @@ vts_audio_lang_extension(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->lang_extension)));
     }
@@ -373,8 +487,9 @@ vts_audio_multichannel_extension(ifo, audiono)
     PREINIT:
     audio_attr_t   *a_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (audiono >= 0 && audiono < ifo->vtsi_mat->nr_of_vts_audio_streams) {
         a_attr = &ifo->vtsi_mat->vts_audio_attr[audiono];
         XPUSHs(sv_2mortal(newSViv(a_attr->multichannel_extension)));
     }
@@ -387,7 +502,9 @@ vts_subtitles(ifo)
     int i;
     subp_attr_t    *s_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else
     for (i = 0; i < ifo->vtsi_mat->nr_of_vts_subp_streams; i++) {
         s_attr = &ifo->vtsi_mat->vts_subp_attr[i];
         if (!(  s_attr->type == 0
@@ -405,8 +522,9 @@ vts_subtitle_lang_extension(ifo, subtitleno)
     PREINIT:
     subp_attr_t    *s_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (subtitleno < ifo->vtsi_mat->nr_of_vts_subp_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (subtitleno >= 0 && subtitleno < ifo->vtsi_mat->nr_of_vts_subp_streams) {
         s_attr = &ifo->vtsi_mat->vts_subp_attr[subtitleno];
         XPUSHs(sv_2mortal(newSViv(s_attr->lang_extension)));
     }
@@ -418,8 +536,9 @@ vts_subtitle_language(ifo, subtitleno)
     PREINIT:
     subp_attr_t    *s_attr;
     PPCODE:
-    if (ifo->vtsi_mat)
-    if (subtitleno < ifo->vtsi_mat->nr_of_vts_subp_streams) {
+    if (!ifo->vtsi_mat)
+        croak(CROAK_NOT_VTS);
+    else if (subtitleno >= 0 && subtitleno < ifo->vtsi_mat->nr_of_vts_subp_streams) {
         s_attr = &ifo->vtsi_mat->vts_subp_attr[subtitleno];
         if(s_attr->type == 1) {
             char tmp[3] = "";
@@ -433,23 +552,34 @@ vts_subtitle_language(ifo, subtitleno)
 # chapter discovering, woot
 
 void
-title_length(vmg, vts, ttn)
-    ifo_handle_t * vmg
+vts_chapters_count(ifo, ttn)
+    ifo_handle_t * ifo
+    int ttn
+    PREINIT:
+    vts_ptt_srpt_t * vts_ptt_srpt;
+    PPCODE:
+    vts_ptt_srpt = ifo->vts_ptt_srpt;
+    if (!vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else if (ttn > 0 && ttn <= vts_ptt_srpt->nr_of_srpts)
+        XPUSHs(sv_2mortal(newSViv(vts_ptt_srpt->title[ttn - 1].nr_of_ptts)));
+
+void
+title_length(vts, ttn)
     ifo_handle_t * vts
     int ttn
     PREINIT:
     pgc_t *cur_pgc;
     int pgc_id;
-    tt_srpt_t *tt_srpt;
     vts_ptt_srpt_t * vts_ptt_srpt;
     dvd_time_t     *dt;
     long ms, hour, minute, second;
     double fps;
     PPCODE:
-    tt_srpt = vmg->tt_srpt;
     vts_ptt_srpt = vts->vts_ptt_srpt;
-    if (tt_srpt && vts_ptt_srpt)
-    if (ttn <= tt_srpt->nr_of_srpts) {
+    if (!vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else if (ttn > 0 && ttn <= vts_ptt_srpt->nr_of_srpts) {
         pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[0].pgcn;
         cur_pgc  = vts->vts_pgcit->pgci_srp[pgc_id - 1].pgc;
         dt = &cur_pgc->playback_time;
@@ -470,101 +600,189 @@ title_length(vmg, vts, ttn)
     }
 
 void
-chapter_first_sector(vmg, vts, ttn, chapter)
-    ifo_handle_t * vmg
+vts_pgc_id(vts, ttn, chapter = 1)
     ifo_handle_t * vts
     int ttn
     int chapter
     PREINIT:
-    pgc_t *cur_pgc;
     int pgc_id;
-    tt_srpt_t *tt_srpt;
     vts_ptt_srpt_t * vts_ptt_srpt;
     PPCODE:
-    chapter--;
-    tt_srpt = vmg->tt_srpt;
     vts_ptt_srpt = vts->vts_ptt_srpt;
-    if (tt_srpt && vts_ptt_srpt)
-    if (ttn <= tt_srpt->nr_of_srpts) {
-        pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[chapter].pgcn;
-        cur_pgc  = vts->vts_pgcit->pgci_srp[pgc_id - 1].pgc;
-        XPUSHs(sv_2mortal(newSViv(cur_pgc->cell_playback[chapter].first_sector)));
+    if (!vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else if (ttn > 0 && ttn <= vts_ptt_srpt->nr_of_srpts &&
+        chapter > 0 && chapter <= vts_ptt_srpt->title[ttn - 1].nr_of_ptts) {
+        pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[chapter-1].pgcn;
+        XPUSHs(sv_2mortal(newSViv(pgc_id)));
     }
 
 void
-chapter_last_sector(vmg, vts, ttn, chapter)
-    ifo_handle_t * vmg
+vts_pgcs_count(vts)
+    ifo_handle_t * vts
+    PPCODE:
+    if (!vts->vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else
+    XPUSHs(sv_2mortal(newSViv(vts->vts_pgcit->nr_of_pgci_srp)));
+
+void
+vts_pgc_num(vts, ttn, chapter)
     ifo_handle_t * vts
     int ttn
     int chapter
     PREINIT:
-    pgc_t *cur_pgc;
-    int pgc_id;
-    tt_srpt_t *tt_srpt;
+    int pgn;
     vts_ptt_srpt_t * vts_ptt_srpt;
     PPCODE:
-    chapter--;
-    tt_srpt = vmg->tt_srpt;
     vts_ptt_srpt = vts->vts_ptt_srpt;
-    if (tt_srpt && vts_ptt_srpt)
-    if (ttn <= tt_srpt->nr_of_srpts) {
-        pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[chapter].pgcn;
-        cur_pgc  = vts->vts_pgcit->pgci_srp[pgc_id - 1].pgc;
-        XPUSHs(sv_2mortal(newSViv(cur_pgc->cell_playback[chapter].last_sector)));
+    if (!vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else if (ttn > 0 && ttn <= vts_ptt_srpt->nr_of_srpts &&
+        chapter > 0 && chapter <= vts_ptt_srpt->title[ttn - 1].nr_of_ptts) {
+        pgn = vts_ptt_srpt->title[ttn - 1].ptt[chapter -1].pgn;
+        XPUSHs(sv_2mortal(newSViv(pgn)));
     }
 
 void
-chapter_offset(vmg, vts, ttn, chapter)
-    ifo_handle_t * vmg
-    ifo_handle_t * vts
-    int ttn
-    int chapter
+vts_pgc(sv_vts, pgc_id)
+    SV * sv_vts
+    int pgc_id
     PREINIT:
-    pgc_t *cur_pgc;
-    int pgn, pgc_id, start_cell, end_cell, j, i;
-    dvd_time_t     *dt;
-    double          fps;
-    long            hour, minute, second, ms, overall_time, cur_time, playtime;
-    tt_srpt_t *tt_srpt;
-    vts_ptt_srpt_t * vts_ptt_srpt;
+    ifo_handle_t * vts;
+    sv_pgc_t * sv_pgc;
+    vts_ptt_srpt_t * vts_ptt_srpt; 
     PPCODE:
-    tt_srpt = vmg->tt_srpt;
-    vts_ptt_srpt = vts->vts_ptt_srpt;
-    chapter--; /* 1 => 0 */
-    if (tt_srpt && vts_ptt_srpt)
-    if (ttn <= tt_srpt->nr_of_srpts) {
-        cur_time   = 0;
-        for(i=0;i<chapter;i++) {
-        pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[i].pgcn;
-        pgn      = vts_ptt_srpt->title[ttn - 1].ptt[i].pgn;
-        cur_pgc  = vts->vts_pgcit->pgci_srp[pgc_id -1].pgc;
-        start_cell = cur_pgc->program_map[pgn - 1] - 1;
-
-        pgc_id   = vts_ptt_srpt->title[ttn - 1].ptt[i+1].pgcn;
-        pgn      = vts_ptt_srpt->title[ttn - 1].ptt[i+1].pgn;
-        cur_pgc  = vts->vts_pgcit->pgci_srp[pgc_id -1].pgc;
-        end_cell = cur_pgc->program_map[pgn - 1] - 2;
-
-        for(j=start_cell;j<=end_cell;j++) {
-            dt = &cur_pgc->cell_playback[j].playback_time;
-            hour = ((dt->hour & 0xf0) >> 4) * 10 + (dt->hour & 0x0f);
-            minute = ((dt->minute & 0xf0) >> 4) * 10 + (dt->minute & 0x0f);
-            second = ((dt->second & 0xf0) >> 4) * 10 + (dt->second & 0x0f);
-            if (((dt->frame_u & 0xc0) >> 6) == 1)
-                fps = 25.00;
-            else
-                fps = 29.97;
-            dt->frame_u &= 0x3f;
-            dt->frame_u = ((dt->frame_u & 0xf0) >> 4) * 10 + (dt->frame_u & 0x0f);
-            ms = (double)dt->frame_u * 1000.0 / fps;
-            cur_time += (hour * 60 * 60 * 1000 + minute * 60 * 1000 + second * 1000 + ms);
-        }
-        }
-        XPUSHs(sv_2mortal(newSViv(cur_time)));
+    if (sv_isobject(sv_vts) && (SvTYPE(SvRV(sv_vts)) == SVt_PVMG))
+        vts = (ifo_handle_t *)SvIV((SV*)SvRV( sv_vts ));
+    else {
+        warn( "DVD::Read::Dvd::Ifo::Vts::vts_pgc() -- ifo is not a blessed SV reference" );
+        XSRETURN_UNDEF;
     }
+    vts_ptt_srpt = vts->vts_ptt_srpt;
+    if (!vts_ptt_srpt)
+        croak(CROAK_NOT_VTS);
+    else if (pgc_id > 0 && pgc_id <= vts->vts_pgcit->nr_of_pgci_srp) {
+        sv_pgc = malloc(sizeof(*sv_pgc));
+        sv_pgc->sv_ifo_handle = SvREFCNT_inc(SvRV(sv_vts));
+        sv_pgc->pgc = vts->vts_pgcit->pgci_srp[pgc_id - 1].pgc;
+        sv_pgc->pgcid = pgc_id;
+        XPUSHs(sv_2mortal(
+            sv_setref_pv(
+                newSVpv("", 0),
+                "DVD::Read::Dvd::Ifo::Pgc",
+                (void *)sv_pgc)
+        ));
+    }
+    
+MODULE = DVD::Read PACKAGE = DVD::Read::Dvd::Ifo::Pgc
 
 void
-DESTROY(ifo)
-    ifo_handle_t * ifo
+DESTROY(sv_pgc)
+    sv_pgc_t * sv_pgc;
+    PPCODE:
+    SvREFCNT_dec(sv_pgc->sv_ifo_handle);
+    free(sv_pgc);
+
+int
+id(sv_pgc)
+    sv_pgc_t * sv_pgc;
     CODE:
-    ifoClose(ifo);
+    RETVAL = sv_pgc->pgcid;
+    OUTPUT:
+    RETVAL
+
+void
+cells_count(sv_pgc)
+    sv_pgc_t * sv_pgc
+    PPCODE:
+    XPUSHs(sv_2mortal(newSViv(sv_pgc->pgc->nr_of_cells)));
+
+void
+cell_number(sv_pgc, pgn)
+    sv_pgc_t * sv_pgc
+    int pgn
+    PPCODE:
+    if (pgn <= sv_pgc->pgc->nr_of_programs)
+        XPUSHs(sv_2mortal(newSViv(sv_pgc->pgc->program_map[pgn - 1])));
+
+void
+cell(sv_pgc, cellid)
+    sv_pgc_t * sv_pgc
+    int cellid
+    PREINIT:
+    sv_cell_playback_t * sv_cell = NULL;
+    PPCODE:
+    if (cellid <= sv_pgc->pgc->nr_of_cells) {
+        sv_cell = malloc(sizeof(* sv_cell));
+        sv_cell->cellid = cellid;
+        sv_cell->cell = &sv_pgc->pgc->cell_playback[cellid -1];
+        sv_cell->sv_ifo_handle = SvREFCNT_inc(sv_pgc->sv_ifo_handle);
+        XPUSHs(sv_2mortal(
+            sv_setref_pv(
+                newSVpv("", 0),
+                "DVD::Read::Dvd::Ifo::Cell",
+                (void *)sv_cell)
+        ));
+    }
+
+void
+_programs_count(sv_pgc)
+    sv_pgc_t * sv_pgc
+    PPCODE:
+    XPUSHs(sv_2mortal(newSViv(sv_pgc->pgc->nr_of_programs)));
+
+MODULE = DVD::Read PACKAGE = DVD::Read::Dvd::Ifo::Cell
+
+void
+DESTROY(sv_cell)
+    sv_cell_playback_t * sv_cell;
+    PPCODE:
+    SvREFCNT_dec(sv_cell->sv_ifo_handle);
+    free(sv_cell);
+
+int
+first_sector(sv_cell)
+    sv_cell_playback_t * sv_cell;
+    CODE:
+    RETVAL = sv_cell->cell->first_sector;
+    OUTPUT:
+    RETVAL
+
+int
+cellid(sv_cell)
+    sv_cell_playback_t * sv_cell;
+    CODE:
+    RETVAL = sv_cell->cellid;
+    OUTPUT:
+    RETVAL
+
+int
+last_sector(sv_cell)
+    sv_cell_playback_t * sv_cell;
+    CODE:
+    RETVAL = sv_cell->cell->last_sector;
+    OUTPUT:
+    RETVAL
+
+void
+time(sv_cell)
+    sv_cell_playback_t * sv_cell
+    PREINIT:
+    double ms, fps, hour, minute, second;
+    dvd_time_t * dt;
+    PPCODE:
+    dt = &sv_cell->cell->playback_time;
+    hour = ((dt->hour & 0xf0) >> 4) * 10 + (dt->hour & 0x0f);
+    minute = ((dt->minute & 0xf0) >> 4) * 10 + (dt->minute & 0x0f);
+    second = ((dt->second & 0xf0) >> 4) * 10 + (dt->second & 0x0f);
+    if (((dt->frame_u & 0xc0) >> 6) == 1)
+        fps = 25.00;
+    else
+        fps = 29.97;
+    dt->frame_u &= 0x3f;
+    dt->frame_u = ((dt->frame_u & 0xf0) >> 4) * 10 + (dt->frame_u & 0x0f);
+    ms = (double)dt->frame_u * 1000.0 / fps;
+    XPUSHs(sv_2mortal(newSVnv(
+    hour * 60 * 60 * 1000 + minute * 60 * 1000 + second * 1000 + ms
+    )));

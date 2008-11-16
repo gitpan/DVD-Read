@@ -5,11 +5,13 @@ use strict;
 use warnings;
 use AutoLoader;
 use vars qw($AUTOLOAD);
+use Carp;
 
 use DVD::Read::Dvd;
 use DVD::Read::Title;
+use DVD::Read::Dvd::Ifo::Vmg;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub AUTOLOAD {
     my ($self, @args) = @_;
@@ -17,6 +19,8 @@ sub AUTOLOAD {
     $sub =~ s/.*:://;
     if (exists(${DVD::Read::Dvd::}{$sub})) {
         return $self->{dvd}->$sub(@args);
+    } else {
+        croak("No function DVD::Read::$sub");
     }
 }
 
@@ -44,7 +48,7 @@ DVD::Read - libdvdread perl binding
 
 This module provide way to query video DVD using libdvdread.
 
-=head2 DVD STRUCTURE
+=head2 Dvd Structure
 
   Dvd (device, directory, iso file...)
   |
@@ -65,7 +69,7 @@ This module provide way to query video DVD using libdvdread.
   \_ VTS title2 (VIDEO_2_VTS.IFO)
   \_ VTS title...
 
-=head2 THIS MODULE
+=head2 This Module
 
 =over 4
 
@@ -74,6 +78,22 @@ This module provide way to query video DVD using libdvdread.
 =item The VTS (per title) are provide by L<DVD::Read::Title> module.
 
 =back
+
+=head2 Technical Notes
+
+=head3 Video Sector
+
+The 'first_sector' and 'last_sector' from module can disagree with
+'tcprobe' (from transcode) results.
+
+After wasting some times to look the code, it seems 'tcprobe' code wrong.
+
+In a nutshell, Title is made of chapter, chapter point to first cells,
+each cells have a first and last sector. But a chapter can have severals
+cells. This is what is used by lsdvd to count cells.
+
+'tcprobe' assume each chapter have only one cells, then fetch cells[chapter]
+to get sectors number. Which is wrong, according 'lsdvd' code.
 
 Notice both VGM and VTS are often need to get title information.
 This module will transparently fetch information need to retrieve
@@ -135,7 +155,7 @@ sub new {
 
 sub _vmg {
     my ($self) = @_;
-    return $self->{vmg} ||= DVD::Read::Dvd::Ifo->new($self->{dvd}, 0);
+    return $self->{vmg} ||= DVD::Read::Dvd::Ifo::Vmg->new($self->{dvd});
 }
 
 =head2 volid
@@ -209,12 +229,21 @@ Just mail me if this is a problem.
 
 =head1 SEE ALSO
 
-L<DVD::Read::Title>
+=over 4
+
+=item L<DVD::Read::Title>
+
+=back
 
 Theses modules are provided but are low level access:
 
-L<DVD::Read::Dvd>
-L<DVD::Read::Dvd::Ifo>
+=over 4
+
+=item L<DVD::Read::Dvd>
+
+=item L<DVD::Read::Dvd::Ifo>
+
+=back
 
 =head1 AUTHOR
 

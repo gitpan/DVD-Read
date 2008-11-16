@@ -1,4 +1,4 @@
-package DVD::Read::Dvd::Ifo;
+package DVD::Read::Dvd::Ifo::Cell;
 
 use 5.010000;
 use strict;
@@ -9,12 +9,9 @@ our $VERSION = '0.03';
 require XSLoader;
 XSLoader::load('DVD::Read', $VERSION);
 
-use base qw(DVD::Read::Dvd::Ifo::Vts);
-use base qw(DVD::Read::Dvd::Ifo::Vmg);
-
 =head1 NAME
 
-DVD::Read::Dvd::Ifo - Access to DVD IFO file using libdvdread
+DVD::Read::Dvd::Ifo::Cell - Access to DVD IFO file using libdvdread
 
 =head1 SYNOPSIS
 
@@ -29,44 +26,41 @@ DVD::Read::Dvd::Ifo - Access to DVD IFO file using libdvdread
 This module provide a low level access DVD IFO files
 using libdvdread.
 
-Internally, the libdvdread does not make difference between structure
-for files from VMG or VTS (eg IFO 0 or any others).
+The PGC is part of video program from DVD.
 
-So this module merge both access to functions.
+=head1 EXPLANATIONS
 
-You are encourage to use L<DVD::Read::Dvd::Ifo::Vmg> and
-L<DVD::Read::Dvd::Ifo::Vts> module now, as they will limit access
-to allowed functions.
+Title contains severals programs, each programs contains a set of ptr to
+cells, each cells point to video sector:
+
+  TITLE (VIDEO_01_VTS.IFO) :
+    |- PGC ID1 [.... $pgc_num ..]            <= track number
+    |             |       |
+    |             `cell1  ` cell3...
+    |
+    |- PGC ID2 [.... $pgc_num ......]        <= track number
+                 |       |        |
+                 `cell1  `cell2   `cell3
+
+This module handle one cell from a PGC.
 
 =head1 FUNCTIONS
 
-=head2 new($dvd, $id)
+=head2 cellid
 
-Return a new DVD::Read::Dvd::Ifo:
+Return the id of the cell
 
-=over 4
+=head2 first_sector
 
-=item $dvd
+The first video sector to read to properly respect this cells
 
-A DVD::Read::Dvd object.
+=head2 last_sector
 
-=item $id
+The last video sector to read to properly respect this cells
 
-The title number you want to get information.
+=head2 time
 
-If $id is 0, you'll get the VGM information.
-Otherwise $id is normal given by title_nr function
-from VGM DVD::Read::Dvd::Ifo object.
-
-=back
-
-=head2 OTHERS FUNCTION
-
-VMG functions are heritated from L<DVD::Read::Dvd::Ifo::Vmg> module.
-
-VTS functions are heritated from L<DVD::Read::Dvd::Ifo::Vts> module.
-
-See their proper documentations.
+The time duration (in millisecond) of this cells
 
 =cut
 

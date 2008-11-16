@@ -1,6 +1,9 @@
 TYPEMAP
-dvd_reader_t *  O_OBJECT
-ifo_handle_t *  O_OBJECT
+dvd_reader_t       *  O_OBJECT
+ifo_handle_t       *  O_OBJECT
+sv_pgc_t           *  O_OBJECT
+sv_cell_playback_t *  O_OBJECT
+dvd_file_t         *  O_OBJECT
 
 INPUT
 O_OBJECT
