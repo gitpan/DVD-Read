@@ -111,6 +111,7 @@ readblock(dvd_file, offset, size)
         XPUSHs(sv_2mortal(newSViv(res)));
         XPUSHs(sv_2mortal(newSVpv(data, DVD_VIDEO_LB_LEN * res)));
     }
+    if(data) free(data); data=NULL;
 
 MODULE = DVD::Read		PACKAGE = DVD::Read::Dvd::Ifo
 

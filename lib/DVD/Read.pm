@@ -11,7 +11,7 @@ use DVD::Read::Dvd;
 use DVD::Read::Title;
 use DVD::Read::Dvd::Ifo::Vmg;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 sub AUTOLOAD {
     my ($self, @args) = @_;

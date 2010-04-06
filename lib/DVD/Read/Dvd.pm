@@ -4,7 +4,7 @@ use 5.010000;
 use strict;
 use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use DVD::Read::Dvd::Ifo::Vmg;
 use DVD::Read::Dvd::Ifo::Vts;

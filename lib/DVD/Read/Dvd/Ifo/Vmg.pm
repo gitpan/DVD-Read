@@ -4,7 +4,7 @@ use 5.010000;
 use strict;
 use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('DVD::Read', $VERSION);
@@ -12,20 +12,20 @@ use DVD::Read::Dvd::Ifo;
 
 =head1 NAME
 
-DVD::Read::Dvd::Ifo - Access to DVD IFO file using libdvdread
+DVD::Read::Dvd::Ifo::Vmg - Access to DVD VMG file using libdvdread
 
 =head1 SYNOPSIS
 
   use DVD::Read::Dvd;
-  use DVD::Read::Dvd::Ifo;
+  use DVD::Read::Dvd::Ifo::Vmg;
   my $dvd = DVD::Read::Dvd->new('/dev/cdrom');
-  my $vmg = DVD::Read::Dvd::Ifo->new($dvd, 0);
+  my $vmg = DVD::Read::Dvd::Ifo::Vmg->new($dvd);
   ...
 
 =head1 DESCRIPTION
 
 This module provide a low level access DVD IFO files
-using libdvdread.
+using libdvdread for the Vmg information.
 
 This module allow you to get video titles informations
 step by step like it is done by libdvdread.
@@ -111,6 +111,7 @@ Just mail me if this is a problem.
 =over 4
 
 =item L<DVD::Read::Dvd>
+=item L<DVD::Read::Dvd::Ifo>
 =item L<DVD::Read::Dvd::Ifo::Vts>
 
 =back
